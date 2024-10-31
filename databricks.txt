@@ -1,0 +1,49 @@
+from pyspark.sql.functions import col 
+from pyspark.sql.types import IntegerType, DoubleType, BooleanType, DateType
+______________________________________________________________________________________________________________________________________________
+configs = {"fs.azure.account.auth.type": "OAuth",
+"fs.azure.account.oauth.provider.type": "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+"fs.azure.account.oauth2.client.id": "31e7f12e-9371-4918-854c-5a93a6c128a0",
+"fs.azure.account.oauth2.client.secret":'zyS8Q~zHCfRxNKAc~Uieiutk~JaeXxDzWTN6mak-',
+"fs.azure.account.oauth2.client.endpoint": "https://login.microsoftonline.com/2e67a43e-596a-4265-be70-d84dee7551fe/oauth2/token"}
+
+dbutils.fs.mount(
+source = "abfss://tokyo-olympic-data@tokyoolympicdata21.dfs.core.windows.net", #container_name@storage_ac_name
+mount_point = "/mnt/tokyoolympic",
+extra_configs = configs)
+_______________________________________________________________________________________________________________________________________________
+%fs
+ls "/mnt/tokyoolympic"
+________________________________________________________________________________________________________________________________________________
+entriesgender = entriesgender.withColumn("Female", col("Female").cast(IntegerType()))\
+    .withColumn("Male", col("Male").cast(IntegerType()))\
+    .withColumn("Total", col("Total").cast(IntegerType()))   
+________________________________________________________________________________________________________________________________________________
+athletes = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/tokyoolympic/raw-data/athletes.csv")
+coaches = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/tokyoolympic/raw-data/coaches.csv")
+entriesgender = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/tokyoolympic/raw-data/entriesgender.csv")
+medals = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/tokyoolympic/raw-data/medals.csv")
+teams = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/tokyoolympic/raw-data/teams.csv")
+________________________________________________________________________________________________________________________________________________
+
+# find top countries with gold medal
+top_gold_medal_countries = medals.orderBy("Gold", ascending=False).select("TeamCountry","Gold").show()
+________________________________________________________________________________________________________________________________________________
+
+#Calculate the average number of entries by gender for each discipline
+average_entries_by_gender = entriesgender.withColumn(
+    'Average_female', entriesgender['Female'] / entriesgender['Total']
+).withColumn(
+    'Average_male', entriesgender['Male'] / entriesgender['Total']
+)
+average_entries_by_gender.show()
+_______________________________________________________________________________________________________________________________________________________
+
+athletes.repartition(1).write.mode("overwrite").option("header", "true").csv("/mnt/tokyoolympic/transform-data/athletes") #this loads data to transfrom folder,+ partiton the data as per need,+ option to overwrite data
+_______________________________________________________________________________________________________________________________________________________
+
+coaches.repartition(1).write.mode("overwrite").option("header", "true").csv("/mnt/tokyoolympic/transform-data/coaches")
+entriesgender.repartition(1).write.mode("overwrite").option("header", "true").csv("/mnt/tokyoolympic/transform-data/entriesgender")
+medals.repartition(1).write.mode("overwrite").option("header", "true").csv("/mnt/tokyoolympic/transform-data/medals")
+teams.repartition(1).write.mode("overwrite").option("header", "true").csv("/mnt/tokyoolympic/transform-data/teams")
+_______________________________________________________________________________________________________________________________________________________
